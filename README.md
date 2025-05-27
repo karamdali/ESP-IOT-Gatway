@@ -1,53 +1,154 @@
-| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-C61 | ESP32-H2 | ESP32-P4 | ESP32-S2 | ESP32-S3 | Linux |
-| ----------------- | ----- | -------- | -------- | -------- | -------- | --------- | -------- | -------- | -------- | -------- | ----- |
-
-# Hello World Example
-
-Starts a FreeRTOS task to print "Hello World".
-
-(See the README.md file in the upper level 'examples' directory for more information about examples.)
-
-## How to use example
-
-Follow detailed instructions provided specifically for this example.
-
-Select the instructions depending on Espressif chip installed on your development board:
-
-- [ESP32 Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/stable/get-started/index.html)
-- [ESP32-S2 Getting Started Guide](https://docs.espressif.com/projects/esp-idf/en/latest/esp32s2/get-started/index.html)
+# ESP32 IOT Gatway - Modbus RTU to MQTTS with Anomaly Detection
 
 
-## Example folder contents
+## Overview
 
-The project **hello_world** contains one source file in C language [hello_world_main.c](main/hello_world_main.c). The file is located in folder [main](main).
+This ESP32 firmware monitors industrial pump systems by:
+- Collecting operational data via Modbus RTU
+- Analyzing 3-axis vibration data
+- Displaying real-time status on OLED
+- Publishing JSON payloads to MQTT
+- Detecting operational anomalies
 
-ESP-IDF projects are built using CMake. The project build configuration is contained in `CMakeLists.txt` files that provide set of directives and instructions describing the project's source files and targets (executable, library, or both).
+## Hardware Requirements
 
-Below is short explanation of remaining files in the project folder.
+- ESP32 development board
+- RS485 transceiver module (MAX485 recommended)
+- SSD1306 OLED display (128x64)
+- Modbus-enabled pump controller ( https://github.com/karamdali/STM32-Modbus-Pump-Controller )
 
+## Features
+
+### Data Acquisition
+- Modbus RTU communication via UART2
+- RS485 DE/RE pin control
+- Configurable polling interval (default: 5s)
+- Reads:
+  - Pump ON/OFF status
+  - Current draw
+  - Flow rate
+  - Total flow
+  - 3-axis vibration data
+
+### Connectivity
+- WiFi station mode
+- MQTT client with TLS support
+- Change `fullchain.pem` with your server public certificate 
+- JSON payload structure:
+  ```json
+  {
+    "pump": "on/off",
+    "current": 0.00,
+    "flow_rate": 0.00,
+    "total_flow": 0.00,
+    "status": "normal/anomaly"
+  }
+
+## User Interface
+
+### OLED Display System
+- **Scrolling text display**  
+  Continuously scrolls status messages across the OLED
+- **Multi-line message queue**  
+  Supports queuing of messages from different system components
+- **Visual alert system**  
+  - Normal messages: Standard display  
+  - Warning/errors: Highlighted display for immediate visibility
+
+## Message Structure Example
+
+```c
+typedef struct {
+  char text[16];     // Display content
+  bool warning;      // Alert flag
+} messages_t;
 ```
-├── CMakeLists.txt
-├── pytest_hello_world.py      Python script used for automated testing
-├── main
-│   ├── CMakeLists.txt
-│   └── hello_world_main.c
-└── README.md                  This is the file you are currently reading
+
+## Anomaly Detection
+
+### Vibration Monitoring System
+
+- **3-axis vibration analysis**  
+  Continuous monitoring of X/Y/Z skew data via Modbus
+
+- **Machine learning detection**  
+  Autoencoder-based anomaly detection model using tensorflow lite
+
+- **Real-time status reporting**  
+  Immediate MQTT alerts when anomalies detected
+
+```c
+// Vibration data structure
+typedef struct {
+  float x;          // X-axis skew
+  float y;          // Y-axis skew 
+  float z;          // Z-axis skew
+} MPU_skew_t;
 ```
 
-For more information on structure and contents of ESP-IDF projects, please refer to Section [Build System](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/build-system.html) of the ESP-IDF Programming Guide.
+## Usage
 
+The system automatically performs these operations:
+
+1. **WiFi Connection**  
+   - Establishes secure connection to configured WiFi network
+2. **MQTT Setup**  
+   - Connects to MQTT broker with TLS encryption
+3. **Modbus Operations**  
+   - Begins periodic polling of Modbus registers (default: 5s interval)
+4. **OLED Display**  
+   - Shows real-time status messages and warnings
+5. **Data Publishing**  
+   - Publishes JSON payloads to MQTT topic `pump/data`:
+     ```json
+     {
+       "pump": "on/off",
+       "current": 0.00,
+       "flow_rate": 0.00,
+       "total_flow": 0.00,
+       "status": "normal/anomaly"
+     }
+     ```
+## Configuration
+
+### WiFi Credentials in `connect.c`
+```c
+#define WIFI_SSID      "your_ssid"       // Your WiFi network name
+#define WIFI_PASS      "your_password"   // Your WiFi password
+```
+### MQTT Credentials `connect.c`
+```c
+#define MQTT_ID         "client_id"      // MQTT client identifier
+#define MQTT_PASSWORD   "client_password"// MQTT authentication password
+```
+### Add your server public key 
+Update `fullchaine.pem` with your server public key.
+
+### Hardware Pins
+```c
+// RS485 Interface
+#define DE_RE_PIN       GPIO_NUM_23      // RS485 Direction control pin
+#define TXD_PIN         GPIO_NUM_17      // UART Transmission pin
+#define RXD_PIN         GPIO_NUM_16      // UART Receive pin
+
+// I2C OLED Configuration (set in menuconfig)
+// CONFIG_SDA_GPIO    GPIO_NUM_21
+// CONFIG_SCL_GPIO    GPIO_NUM_22
+```
 ## Troubleshooting
 
-* Program upload failure
+| Symptom               | Solution                                                                 |
+|-----------------------|--------------------------------------------------------------------------|
+| No OLED display       | Check I2C connections (SDA/SCL) and power to SSD1306                    |
+| Modbus timeout        | Verify RS485 wiring (A/B lines), DE/RE pin configuration, and baud rate |
+| WiFi fails to connect | Verify SSID/password in `connect.h`, check WiFi signal strength         |
+| MQTT disconnect       | Verify broker settings in `connect.h`, server certificate, and keepalive settings       |
+| Data not updating     | Check Modbus slave device is responding to register requests            |
 
-    * Hardware connection is not correct: run `idf.py -p PORT monitor`, and reboot your board to see if there are any output logs.
-    * The baud rate for downloading is too high: lower your baud rate in the `menuconfig` menu, and try again.
+## License
+This code is provided AS IS without warranty. Feel free to use and modify it for any purpose.
 
-## Technical support and feedback
+## Author
+Karam Dali
 
-Please use the following feedback channels:
-
-* For technical queries, go to the [esp32.com](https://esp32.com/) forum
-* For a feature request or bug report, create a [GitHub issue](https://github.com/espressif/esp-idf/issues)
-
-We will get back to you as soon as possible.
+Damascus - November 2024
