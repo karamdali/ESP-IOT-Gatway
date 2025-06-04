@@ -137,9 +137,11 @@ void loop() {
       result = true;
       
     }
+      /* 
     if ((i==4) || (i==6)){
       result = false;
     }
+      */
     xQueueSend(autoencoder,(void *)&result,portMAX_DELAY);
     i++;
   }
